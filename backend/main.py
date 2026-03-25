@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.config import settings
-from backend.api import teams, tasks, agents, workers, messages, events, clis
+from backend.api import teams, tasks, agents, workers, messages, events, clis, auto
 
 
 @asynccontextmanager
@@ -41,6 +41,7 @@ app.include_router(workers.router, prefix=settings.api_prefix)
 app.include_router(messages.router, prefix=settings.api_prefix)
 app.include_router(events.router, prefix=settings.api_prefix)
 app.include_router(clis.router, prefix=settings.api_prefix)
+app.include_router(auto.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

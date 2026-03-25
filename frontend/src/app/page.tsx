@@ -55,9 +55,18 @@ export default function Dashboard() {
           <span className="text-4xl">🦞</span>
           <h1 className="text-3xl font-bold">Agent Team</h1>
         </div>
-        <Link href="/teams/new" className="px-4 py-2 bg-blue-400 rounded-lg hover:bg-blue-500 transition-colors">
-          + 创建团队
-        </Link>
+        <div className="flex gap-3">
+          <Link
+            href="/auto"
+            className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+          >
+            <span>🤖</span>
+            自动模式
+          </Link>
+          <Link href="/teams/new" className="px-4 py-2 bg-blue-400 rounded-lg hover:bg-blue-500 transition-colors">
+            + 创建团队
+          </Link>
+        </div>
       </header>
 
       {/* Stats Overview */}

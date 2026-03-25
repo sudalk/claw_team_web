@@ -128,3 +128,54 @@ export interface SSEEvent {
   data: Record<string, unknown>;
   timestamp: string;
 }
+
+// ============ Auto Mode Types ============
+
+export type ExecutionStatus = "pending" | "running" | "completed" | "failed" | "stopped";
+
+export type LogType =
+  | "thinking"
+  | "step"
+  | "team_creating" | "team_created" | "team_failed"
+  | "worker_spawning" | "worker_spawned" | "worker_failed"
+  | "task_creating" | "task_created" | "task_failed"
+  | "task_assigning" | "task_assigned"
+  | "task_running" | "task_completed" | "task_failed_step"
+  | "execution_started" | "execution_completed" | "execution_failed" | "execution_stopped"
+  | "user_feedback";
+
+export interface ExecutionLog {
+  id: string;
+  type: LogType;
+  step: string;
+  content: string;
+  detail?: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface ExecutionRecord {
+  id: string;
+  prompt: string;
+  team_id: string | null;
+  status: ExecutionStatus;
+  total_tasks: number;
+  completed_tasks: number;
+  failed_tasks: number;
+  progress_percent: number;
+  logs: ExecutionLog[];
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ExecuteRequest {
+  prompt: string;
+  team_name?: string;
+  model?: string;
+}
+
+export interface ExecuteResponse {
+  execution_id: string;
+  team_id: string;
+  status: string;
+  stream_url: string;
+}

@@ -1,6 +1,6 @@
 // API client for ClawTeam Web API
 
-import type { Team, Task, Worker, Message, CLIInfo, SSEEvent } from "@/lib/types";
+import type { Team, Task, Worker, Message, CLIInfo, SSEEvent, ExecutionRecord, ExecutionLog } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -122,7 +122,32 @@ export function createEventSource(teamName: string): EventSource {
 }
 
 // Re-export types for convenience
-export type { Team, Task, Worker, Message, CLIInfo, SSEEvent };
+export type { Team, Task, Worker, Message, CLIInfo, SSEEvent, ExecutionRecord, ExecutionLog };
+
+// ============ Auto Mode API ============
+export const autoAPI = {
+  execute: (data: { prompt: string; team_name?: string; model?: string }) =>
+    fetchAPI<{ execution_id: string; team_id: string; status: string; stream_url: string }>(
+      "/auto/execute",
+      { method: "POST", body: JSON.stringify(data) }
+    ),
+
+  getStatus: (executionId: string) =>
+    fetchAPI<ExecutionRecord>(`/auto/execute/${executionId}`),
+
+  list: () =>
+    fetchAPI<{ executions: ExecutionRecord[]; total: number }>("/auto/executions"),
+
+  stop: (executionId: string) =>
+    fetchAPI<{ execution_id: string; status: string; message: string }>(
+      `/auto/execute/${executionId}/stop`,
+      { method: "POST" }
+    ),
+
+  createEventSource: (identifier: string): EventSource => {
+    return new EventSource(`${API_BASE}/auto/execute/${identifier}/stream`);
+  },
+};
 
 // Alias for backwards compatibility
 export const agentsAPI = {

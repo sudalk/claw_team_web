@@ -106,7 +106,7 @@ export default function AutoModePage() {
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-100">
-      {/* 左侧边栏 */}
+      {/* 左侧边栏 - 会话列表 2份 */}
       <aside className="flex-[2] bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
@@ -152,16 +152,12 @@ export default function AutoModePage() {
         </div>
       </aside>
 
-      {/* 主内容区 - 2:4:4 比例 */}
-      <main className="flex-[4] flex overflow-hidden">
-        {selectedSession ? (
-          <SessionView session={selectedSession} onComplete={handleComplete} />
-        ) : (
-          <NewTaskView onStart={handleStart} />
-        )}
-
-        {/* 右侧 - 执行日志 */}
-        {selectedSession && (
+      {/* 选中会话时：任务详情 4份 + 执行日志 4份 */}
+      {selectedSession ? (
+        <>
+          <div className="flex-[4] overflow-hidden">
+            <SessionView session={selectedSession} onComplete={handleComplete} />
+          </div>
           <aside className="flex-[4] bg-white border-l border-gray-200 flex flex-col">
             <div className="p-4 border-b border-gray-200">
               <h2 className="font-semibold text-gray-900">执行日志</h2>
@@ -174,8 +170,13 @@ export default function AutoModePage() {
               />
             </div>
           </aside>
-        )}
-      </main>
+        </>
+      ) : (
+        /* 未选中时：新建任务占满剩余空间 */
+        <div className="flex-[8] overflow-hidden">
+          <NewTaskView onStart={handleStart} />
+        </div>
+      )}
     </div>
   );
 }

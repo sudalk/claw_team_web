@@ -111,9 +111,9 @@ export default function AutoModePage() {
   const selectedSession = sessions.find((s) => s.id === selectedId);
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="h-screen flex bg-gray-50 overflow-hidden">
       {/* 左侧边栏 - 会话列表 */}
-      <div className="w-80 border-r border-gray-200 bg-white flex flex-col h-screen sticky top-0">
+      <div className="w-72 border-r border-gray-200 bg-white flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
@@ -177,9 +177,9 @@ export default function AutoModePage() {
       </div>
 
       {/* 主内容区 */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex min-w-0">
         {/* 左侧 - 新建或详情 */}
-        <div className="flex-1 p-8 max-w-2xl">
+        <div className="flex-1 p-8 overflow-y-auto">
           {selectedSession ? (
             <SessionDetail session={selectedSession} onComplete={handleComplete} />
           ) : (
@@ -189,7 +189,7 @@ export default function AutoModePage() {
 
         {/* 右侧 - 执行日志 */}
         {selectedSession && (
-          <div className="w-[500px] border-l border-gray-200 bg-white p-6 h-screen sticky top-0 overflow-hidden">
+          <div className="w-[480px] flex-shrink-0 border-l border-gray-200 bg-white p-6 overflow-y-auto self-stretch">
             <h2 className="text-lg font-semibold mb-4">执行日志</h2>
             <ExecutionLogPanel
               identifier={selectedSession.team_id || selectedSession.id}

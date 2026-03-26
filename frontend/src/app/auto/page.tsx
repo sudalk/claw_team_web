@@ -107,7 +107,7 @@ export default function AutoModePage() {
   return (
     <div className="h-screen flex overflow-hidden bg-gray-100">
       {/* 左侧边栏 */}
-      <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+      <aside className="flex-[2] bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-bold text-gray-900">自动模式</h1>
@@ -152,8 +152,8 @@ export default function AutoModePage() {
         </div>
       </aside>
 
-      {/* 主内容区 */}
-      <main className="flex-1 flex overflow-hidden">
+      {/* 主内容区 - 2:4:4 比例 */}
+      <main className="flex-[2] flex overflow-hidden">
         {selectedSession ? (
           <SessionView session={selectedSession} onComplete={handleComplete} />
         ) : (
@@ -162,7 +162,7 @@ export default function AutoModePage() {
 
         {/* 右侧 - 执行日志 */}
         {selectedSession && (
-          <aside className="w-[500px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col">
+          <aside className="flex-[4] bg-white border-l border-gray-200 flex flex-col">
             <div className="p-4 border-b border-gray-200">
               <h2 className="font-semibold text-gray-900">执行日志</h2>
               <p className="text-xs text-gray-500 mt-0.5">实时任务执行状态</p>

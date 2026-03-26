@@ -795,10 +795,12 @@ function MessagesPanel({ messages: initialMessages, teamId, onUpdate }: { messag
 
 // ============ Settings Panel ============
 function SettingsPanel({ team, onUpdate }: { team: Team; onUpdate: () => void }) {
+  const router = useRouter();
   const [name, setName] = useState(team.name);
   const [description, setDescription] = useState(team.description || "");
   const [workdir, setWorkdir] = useState(team.workdir || "");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -813,6 +815,18 @@ function SettingsPanel({ team, onUpdate }: { team: Team; onUpdate: () => void })
       alert(err instanceof Error ? err.message : "保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteTeam() {
+    if (!confirm(`确定要删除团队 "${team.name}" 吗？此操作不可恢复！`)) return;
+    setDeleting(true);
+    try {
+      await teamsAPI.delete(team.id);
+      router.push("/");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "删除失败");
+      setDeleting(false);
     }
   }
 
@@ -859,6 +873,21 @@ function SettingsPanel({ team, onUpdate }: { team: Team; onUpdate: () => void })
           className="px-4 py-2 bg-blue-400 text-white rounded hover:bg-blue-500 disabled:opacity-50"
         >
           {saving ? "保存中..." : "保存"}
+        </button>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="max-w-xl mt-8 pt-6 border-t border-gray-200">
+        <h3 className="text-lg font-semibold text-red-600 mb-2">危险区域</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          删除团队将永久删除团队及其所有任务、Worker 和消息。此操作不可恢复。
+        </p>
+        <button
+          onClick={deleteTeam}
+          disabled={deleting}
+          className="px-4 py-2 bg-red-100 text-red-700 border border-red-300 rounded hover:bg-red-200 disabled:opacity-50"
+        >
+          {deleting ? "删除中..." : "删除团队"}
         </button>
       </div>
     </div>

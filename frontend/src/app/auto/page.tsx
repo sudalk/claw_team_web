@@ -162,7 +162,7 @@ export default function AutoModePage() {
 
         {/* 右侧 - 执行日志 */}
         {selectedSession && (
-          <aside className="w-[420px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col">
+          <aside className="w-[500px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col">
             <div className="p-4 border-b border-gray-200">
               <h2 className="font-semibold text-gray-900">执行日志</h2>
               <p className="text-xs text-gray-500 mt-0.5">实时任务执行状态</p>
@@ -183,8 +183,8 @@ export default function AutoModePage() {
 // 新建任务视图
 function NewTaskView({ onStart }: { onStart: (teamId: string, executionId: string, prompt: string) => void }) {
   return (
-    <div className="flex-1 overflow-y-auto p-8">
-      <div className="max-w-2xl mx-auto">
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="max-w-2xl">
         <div className="mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-1">创建新任务</h2>
           <p className="text-sm text-gray-500">描述你的需求，AI 将自动规划和执行</p>
@@ -218,8 +218,8 @@ function SessionView({ session, onComplete }: { session: Session; onComplete: ()
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-8">
-      <div className="max-w-3xl mx-auto space-y-4">
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -267,7 +267,7 @@ function SessionView({ session, onComplete }: { session: Session; onComplete: ()
         {!loading && record && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
             <h3 className="text-sm font-medium text-gray-500 mb-3">执行统计</h3>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="总任务" value={record.total_tasks} color="gray" />
               <StatCard label="已完成" value={record.completed_tasks} color="green" />
               <StatCard label="失败" value={record.failed_tasks} color="red" />

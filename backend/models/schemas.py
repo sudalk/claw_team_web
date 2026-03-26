@@ -300,6 +300,26 @@ class SSEEventType(str, Enum):
     # General
     MEMBER_JOINED = "member_joined"
 
+    # Execution events (auto mode)
+    EXECUTION_STARTED = "execution_started"
+    EXECUTION_COMPLETED = "execution_completed"
+    EXECUTION_FAILED = "execution_failed"
+    EXECUTION_STOPPED = "execution_stopped"
+    EXECUTION_THINKING = "thinking"
+    EXECUTION_STEP = "step"
+    TEAM_CREATING = "team_creating"
+    TEAM_CREATED = "team_created"
+    TEAM_FAILED = "team_failed"
+    WORKER_SPAWNING = "worker_spawning"
+    WORKER_FAILED = "worker_failed"
+    TASK_CREATING = "task_creating"
+    TASK_ASSIGNING = "task_assigning"
+    TASK_ASSIGNED = "task_assigned"
+    TASK_RUNNING = "task_running"
+    TASK_COMPLETED_STEP = "task_completed_step"
+    TASK_FAILED_STEP = "task_failed_step"
+    USER_FEEDBACK = "user_feedback"
+
 
 class SSEEvent(BaseModel):
     type: SSEEventType

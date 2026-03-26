@@ -165,17 +165,31 @@ class TaskService:
         if not task_file.exists():
             return None
 
+        # 支持 dict 或 TaskUpdate
+        if isinstance(data, dict):
+            status_val = data.get("status")
+            assignee_val = data.get("assignee_id")
+            subject_val = data.get("subject")
+            desc_val = data.get("description")
+            priority_val = data.get("priority")
+        else:
+            status_val = data.status.value if hasattr(data.status, 'value') else str(data.status) if data.status else None
+            assignee_val = data.assignee_id
+            subject_val = data.subject
+            desc_val = data.description
+            priority_val = data.priority.value if hasattr(data.priority, 'value') else str(data.priority) if data.priority else None
+
         cmd = ["clawteam", "task", "update", team_name, task_id]
-        if data.status is not None:
-            cmd.extend(["--status", data.status.value])
-        if data.assignee_id is not None:
-            cmd.extend(["--owner", data.assignee_id])
-        if data.subject is not None:
-            cmd.extend(["--subject", data.subject])
-        if data.description is not None:
-            cmd.extend(["--description", data.description])
-        if data.priority is not None:
-            cmd.extend(["--priority", data.priority.value])
+        if status_val is not None:
+            cmd.extend(["--status", str(status_val)])
+        if assignee_val is not None:
+            cmd.extend(["--owner", str(assignee_val)])
+        if subject_val is not None:
+            cmd.extend(["--subject", str(subject_val)])
+        if desc_val is not None:
+            cmd.extend(["--description", str(desc_val)])
+        if priority_val is not None:
+            cmd.extend(["--priority", str(priority_val)])
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)

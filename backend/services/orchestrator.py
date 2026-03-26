@@ -16,10 +16,16 @@ from backend.models.execution import (
     LogType,
     execution_storage,
 )
+from backend.models.schemas import (
+    TeamCreate, WorkerCreate, WorkerConfig, TaskCreate,
+    TaskPriority, TaskStatus, CLIVendor, SpawnBackend,
+    SSEEventType,
+)
 from backend.services.event_service import event_service
 from backend.services.team_service import team_service
 from backend.services.worker_service import worker_service
 from backend.services.task_service import task_service
+from backend.services.executor_service import executor_service
 
 
 # Task decomposition prompt template
@@ -112,13 +118,7 @@ class OrchestratorAgent:
 
     async def analyze_and_decompose(self, prompt: str) -> ExecutionPlan:
         """分析需求并拆解任务"""
-        full_prompt = f"""
-{TASK_DECOMPOSE_PROMPT}
-
-{TASK_DECOMPOSE_EXAMPLE}
-
-请开始分析并输出：
-"""
+        full_prompt = TASK_DECOMPOSE_PROMPT.replace("{prompt}", prompt) + "\n\n" + TASK_DECOMPOSE_EXAMPLE + "\n\n请开始分析并输出："
         result = llm_client.structured_output(
             prompt=full_prompt,
             json_schema={
@@ -168,29 +168,35 @@ class OrchestratorAgent:
         )
         return ExecutionPlan(**result)
 
-    async def execute(self, prompt: str, team_name: Optional[str] = None) -> ExecutionRecord:
+    async def execute(self, prompt: str, team_name: Optional[str] = None,
+                      workdir: Optional[str] = None, execution_id: Optional[str] = None) -> ExecutionRecord:
         """
         执行自动任务
 
         流程:
-        1. 创建执行记录
+        1. 创建/復用执行记录
         2. 需求分析 & 任务拆解
         3. 创建团队
         4. 启动 Workers
         5. 创建并分配任务
         6. 监控执行状态
         """
-        execution_id = str(uuid.uuid4())[:12]
-        team_id = team_name or f"auto-{execution_id}"
+        team_id = team_name or f"auto-{execution_id or str(uuid.uuid4())[:12]}"
 
-        # 创建执行记录
-        record = ExecutionRecord(
-            id=execution_id,
-            prompt=prompt,
-            team_id=team_id,
-            status=ExecutionStatus.RUNNING,
-        )
-        execution_storage.save(record)
+        # 復用或创建执行记录
+        if execution_id:
+            record = execution_storage.load(execution_id)
+        else:
+            record = None
+
+        if not record:
+            record = ExecutionRecord(
+                id=execution_id or str(uuid.uuid4())[:12],
+                prompt=prompt,
+                team_id=team_id,
+                status=ExecutionStatus.RUNNING,
+            )
+            execution_storage.save(record)
 
         try:
             # 1. 需求分析
@@ -200,7 +206,7 @@ class OrchestratorAgent:
                 "🤔 正在分析需求..."
             )
             execution_storage.save(record)
-            await event_service.emit(team_id, "execution_started", record.to_sse_data())
+            await event_service.emit(team_id, SSEEventType.EXECUTION_STARTED, record.to_sse_data())
 
             record.add_log(
                 LogType.THINKING,
@@ -245,10 +251,11 @@ class OrchestratorAgent:
             execution_storage.save(record)
 
             try:
-                team = team_service.create_team({
-                    "name": team_id,
-                    "description": f"自动执行团队 - {plan.summary}",
-                })
+                team = team_service.create_team(TeamCreate(
+                    name=team_id,
+                    description=f"自动执行团队 - {plan.summary}",
+                    workdir=workdir,
+                ))
                 record.add_log(
                     LogType.TEAM_CREATED,
                     "team_created",
@@ -265,6 +272,13 @@ class OrchestratorAgent:
 
             # 4. 启动 Workers
             for worker_config in plan.workers:
+                # 检查是否已停止
+                record = execution_storage.load(record.id)
+                if record.status == ExecutionStatus.STOPPED:
+                    record.add_log(LogType.EXECUTION_STOPPED, "stopped", "🛑 用户停止了执行")
+                    execution_storage.save(record)
+                    return record
+
                 record.add_log(
                     LogType.WORKER_SPAWNING,
                     "spawning_worker",
@@ -273,14 +287,23 @@ class OrchestratorAgent:
                 execution_storage.save(record)
 
                 try:
-                    worker = worker_service.create_worker(team_id, {
-                        "name": worker_config["name"],
-                        "role": worker_config["role"],
-                        "config": {
-                            "cli": "claude",
-                            "backend": "tmux",
-                        }
-                    })
+                    # 根据 plan 中的 role 选择 CLI
+                    cli_vendor = CLIVendor.CLAUDE  # 默认
+                    cli_name = worker_config.get("cli", "").lower()
+                    for vendor in CLIVendor:
+                        if vendor.value == cli_name:
+                            cli_vendor = vendor
+                            break
+
+                    worker = worker_service.create_worker(team_id, WorkerCreate(
+                        name=worker_config["name"],
+                        role=worker_config["role"],
+                        config=WorkerConfig(
+                            cli=cli_vendor,
+                            backend=SpawnBackend.TMUX,
+                            workdir=workdir,
+                        ),
+                    ))
                     record.add_log(
                         LogType.WORKER_SPAWNED,
                         "worker_spawned",
@@ -306,11 +329,18 @@ class OrchestratorAgent:
                 execution_storage.save(record)
 
                 try:
-                    task = task_service.create_task(team_id, {
-                        "subject": task_def["subject"],
-                        "description": task_def.get("description", ""),
-                        "priority": task_def.get("priority", "medium"),
-                    })
+                    priority = TaskPriority.MEDIUM
+                    if task_def.get("priority", "").lower() == "high":
+                        priority = TaskPriority.HIGH
+                    elif task_def.get("priority", "").lower() == "low":
+                        priority = TaskPriority.LOW
+
+                    task = task_service.create_task(team_id, TaskCreate(
+                        subject=task_def["subject"],
+                        description=task_def.get("description", ""),
+                        priority=priority,
+                        blocked_by=task_def.get("blocked_by", []),
+                    ))
                     task_map[task_def["id"]] = task.id
 
                     record.add_log(
@@ -327,8 +357,15 @@ class OrchestratorAgent:
                     )
                 execution_storage.save(record)
 
-            # 6. 分配任务（按执行顺序）
+            # 6. 分配并执行任务（按执行顺序）
             for task_id in plan.execution_order:
+                # 检查是否已停止
+                record = execution_storage.load(record.id)
+                if record.status == ExecutionStatus.STOPPED:
+                    record.add_log(LogType.EXECUTION_STOPPED, "stopped", "🛑 用户停止了执行")
+                    execution_storage.save(record)
+                    return record
+
                 task_def = next((t for t in plan.tasks if t["id"] == task_id), None)
                 if not task_def or task_id not in task_map:
                     continue
@@ -370,31 +407,83 @@ class OrchestratorAgent:
                     )
                 execution_storage.save(record)
 
-                # 触发 Worker 执行
+                # 检查并等待依赖任务完成
+                blocked_by = task_def.get("blocked_by", [])
+                if blocked_by:
+                    # 将 plan 中的任务 ID 映射为实际的任务 ID
+                    real_dep_ids = [task_map[dep_id] for dep_id in blocked_by if dep_id in task_map]
+                    if real_dep_ids:
+                        deps_met, pending = executor_service.check_dependencies_met(team_id, real_dep_ids)
+                        if not deps_met:
+                            record.add_log(
+                                LogType.THINKING,
+                                "waiting_deps",
+                                f"⏳ 等待依赖任务完成：{', '.join(pending)} -> {task_def['subject']}"
+                            )
+                            execution_storage.save(record)
+                            # 等待所有依赖完成（最多等待 settings.execution_timeout 秒）
+                            deps_met = await executor_service.wait_for_dependencies(
+                                team_id, task_map[task_id], real_dep_ids,
+                                timeout=settings.execution_timeout,
+                            )
+                            if not deps_met:
+                                record.add_log(
+                                    LogType.TASK_FAILED_STEP,
+                                    "deps_timeout",
+                                    f"⚠️ 等待依赖超时，跳过任务：{task_def['subject']}"
+                                )
+                                record.failed_tasks += 1
+                                execution_storage.save(record)
+                                continue
+
+                # 执行任务
                 if worker:
                     record.add_log(
                         LogType.TASK_RUNNING,
                         "executing_task",
-                        f"⚡ 触发 Worker 执行：{task_def['subject']}"
+                        f"⚡ 开始执行任务：{task_def['subject']}"
                     )
                     execution_storage.save(record)
 
                     try:
-                        worker_service.execute_task(team_id, worker.id)
-                        record.add_log(
-                            LogType.TASK_RUNNING,
-                            "task_running",
-                            f"🔄 任务执行中：{task_def['subject']}",
-                            detail={"task_id": task_map[task_id]}
+                        # 调用执行器执行任务
+                        result = await executor_service.execute_task(
+                            team_name=team_id,
+                            task_id=task_map[task_id],
+                            workdir=workdir,
+                            skip_dep_check=True,
                         )
-                        record.completed_tasks += 1
+
+                        if result["success"]:
+                            record.add_log(
+                                LogType.TASK_COMPLETED,
+                                "task_completed",
+                                f"✅ 任务执行完成：{task_def['subject']}",
+                                detail={"task_id": task_map[task_id]}
+                            )
+                            record.completed_tasks += 1
+                        else:
+                            record.add_log(
+                                LogType.TASK_FAILED_STEP,
+                                "task_failed",
+                                f"❌ 任务执行失败：{task_def['subject']} - {result.get('error', 'Unknown error')}",
+                                detail={"task_id": task_map[task_id]}
+                            )
+                            record.failed_tasks += 1
                     except Exception as e:
                         record.add_log(
                             LogType.TASK_FAILED_STEP,
-                            "task_execute_failed",
-                            f"⚠️ 执行触发失败：{str(e)}"
+                            "task_execute_error",
+                            f"⚠️ 执行异常：{task_def['subject']} - {str(e)}"
                         )
                         record.failed_tasks += 1
+                else:
+                    record.add_log(
+                        LogType.TASK_FAILED_STEP,
+                        "no_worker",
+                        f"⚠️ 未找到 Worker，跳过任务：{task_def['subject']}"
+                    )
+                    record.failed_tasks += 1
                 execution_storage.save(record)
 
             # 完成
@@ -406,7 +495,7 @@ class OrchestratorAgent:
                 f"🎉 执行完成！共 {record.completed_tasks} 个任务成功，{record.failed_tasks} 个失败"
             )
             execution_storage.save(record)
-            await event_service.emit(team_id, "execution_completed", record.to_sse_data())
+            await event_service.emit(team_id, SSEEventType.EXECUTION_COMPLETED, record.to_sse_data())
 
         except Exception as e:
             record.status = ExecutionStatus.FAILED
@@ -417,7 +506,7 @@ class OrchestratorAgent:
                 f"❌ 执行失败：{str(e)}"
             )
             execution_storage.save(record)
-            await event_service.emit(team_id, "execution_failed", record.to_sse_data())
+            await event_service.emit(team_id, SSEEventType.EXECUTION_FAILED, record.to_sse_data())
 
         return record
 

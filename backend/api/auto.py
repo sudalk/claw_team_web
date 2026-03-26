@@ -1,9 +1,12 @@
 """Auto mode API - 自动执行相关 API"""
 
 import asyncio
+import json
+import uuid
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.models.execution import (
@@ -21,6 +24,7 @@ class ExecuteRequest(BaseModel):
     """启动自动执行的请求"""
     prompt: str
     team_name: str | None = None
+    workdir: str | None = None  # 工作目录，如 "/Users/likang/geminicode/Agent/team_test"
     model: str | None = None  # 可选，指定 LLM 模型
 
 
@@ -54,7 +58,7 @@ async def start_execution(
 ):
     """启动自动执行"""
     # 检查是否有正在运行的执行
-    records = execution_storage.list()
+    records = execution_storage.list_meta_only()
     running = [r for r in records if r.status == ExecutionStatus.RUNNING]
     if running:
         raise HTTPException(
@@ -62,33 +66,41 @@ async def start_execution(
             detail="已有执行正在进行中，请等待完成或停止后再试"
         )
 
-    # 创建执行记录
-    team_id = request.team_name or f"auto-execution"
+    # 生成唯一的 execution_id 和 team_id
+    execution_id = str(uuid.uuid4())[:12]
+    team_id = request.team_name or f"auto-{execution_id}"
 
-    # 异步执行
+    # 同步创建执行记录，确保 SSE stream 可以立即找到
+    record = ExecutionRecord(
+        id=execution_id,
+        prompt=request.prompt,
+        team_id=team_id,
+        status=ExecutionStatus.RUNNING,
+    )
+    execution_storage.save(record)
+
+    # 异步执行（传入已创建的 execution_id）
     async def run_orchestrator():
-        await orchestrator_agent.execute(request.prompt, team_id)
+        await orchestrator_agent.execute(
+            request.prompt, team_id,
+            workdir=request.workdir,
+            execution_id=execution_id,
+        )
 
     background_tasks.add_task(run_orchestrator)
 
     # 返回响应
     return ExecuteResponse(
-        execution_id="pending",  # 会在 SSE 中获取真实 ID
+        execution_id=execution_id,
         team_id=team_id,
         status="running",
         stream_url=f"/api/v1/auto/execute/{team_id}/stream",
     )
 
 
-@router.get("/execute/{identifier}/stream")
-async def stream_execution(identifier: str) -> AsyncGenerator[str, None]:
-    """
-    SSE 流式获取执行日志
-
-    identifier 可以是 execution_id 或 team_id
-    """
+async def _stream_generator(identifier: str):
+    """SSE 流生成器"""
     # 尝试通过 team_id 查找（初始阶段）
-    # 查找最新的执行记录
     records = execution_storage.list()
     record = None
 
@@ -100,7 +112,7 @@ async def stream_execution(identifier: str) -> AsyncGenerator[str, None]:
 
     if not record:
         # 还没创建记录，发送初始消息
-        yield f"data: {{'type': 'connected', 'team_id': '{identifier}', 'status': 'initializing'}}\n\n"
+        yield f"data: {json.dumps({'type': 'connected', 'team_id': identifier, 'status': 'initializing'})}\n\n"
         # 等待记录创建
         for _ in range(30):  # 最多等 30 秒
             await asyncio.sleep(1)
@@ -113,22 +125,24 @@ async def stream_execution(identifier: str) -> AsyncGenerator[str, None]:
                 break
 
     if not record:
-        yield f"data: {{'type': 'error', 'content': '执行记录未找到'}}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'content': '执行记录未找到'})}\n\n"
         return
 
     # 流式发送日志
     last_log_count = 0
     while True:
-        if record.status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.STOPPED]:
-            # 发送最后的状态
-            yield f"data: {record.to_sse_data()}\n\n"
-            break
-
-        # 检查新日志
+        # 检查新日志（先发送日志，再检查终止状态）
         if len(record.logs) > last_log_count:
             for log in record.logs[last_log_count:]:
-                yield f"data: {log.to_sse_data()}\n\n"
+                yield f"data: {json.dumps(log.to_sse_data())}\n\n"
             last_log_count = len(record.logs)
+
+        if record.status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.STOPPED]:
+            # 发送终止事件（包含 content 字段以便前端显示）
+            terminal_data = record.to_sse_data()
+            terminal_data["content"] = terminal_data.get("content", f"执行{record.status.value}")
+            yield f"data: {json.dumps(terminal_data)}\n\n"
+            break
 
         await asyncio.sleep(1)
 
@@ -136,6 +150,24 @@ async def stream_execution(identifier: str) -> AsyncGenerator[str, None]:
         record = execution_storage.load(record.id)
         if not record:
             break
+
+
+@router.get("/execute/{identifier}/stream")
+async def stream_execution(identifier: str):
+    """
+    SSE 流式获取执行日志
+
+    identifier 可以是 execution_id 或 team_id
+    """
+    return StreamingResponse(
+        _stream_generator(identifier),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.get("/execute/{execution_id}", response_model=ExecutionStatusResponse)

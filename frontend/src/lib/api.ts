@@ -126,7 +126,7 @@ export type { Team, Task, Worker, Message, CLIInfo, SSEEvent, ExecutionRecord, E
 
 // ============ Auto Mode API ============
 export const autoAPI = {
-  execute: (data: { prompt: string; team_name?: string; model?: string }) =>
+  execute: (data: { prompt: string; team_name?: string; workdir?: string; model?: string }) =>
     fetchAPI<{ execution_id: string; team_id: string; status: string; stream_url: string }>(
       "/auto/execute",
       { method: "POST", body: JSON.stringify(data) }

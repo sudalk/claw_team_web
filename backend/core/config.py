@@ -1,5 +1,6 @@
 """Core configuration for ClawTeam Web API."""
 
+import os
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
@@ -32,6 +33,18 @@ class Settings(BaseSettings):
 
     class Config:
         env_prefix = "CLAWTEAM_WEB_"
+        extra = "allow"  # Allow extra fields
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # 优先从环境变量读取 LLM 配置
+        # 支持 ANTHROPIC_* 前缀
+        if not self.llm_api_key:
+            self.llm_api_key = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+        if not self.llm_base_url or self.llm_base_url == "https://api.minimaxi.com/anthropic/v1":
+            self.llm_base_url = os.environ.get("ANTHROPIC_BASE_URL", self.llm_base_url)
+        if not self.llm_model:
+            self.llm_model = os.environ.get("ANTHROPIC_MODEL", self.llm_model)
 
 
 settings = Settings()

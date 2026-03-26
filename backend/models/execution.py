@@ -1,4 +1,5 @@
 """Execution models - 自动执行记录的数据模型"""
+from __future__ import annotations
 
 import json
 import uuid
@@ -114,6 +115,20 @@ class ExecutionRecord(BaseModel):
             ),
         }
 
+    def to_sse_data(self) -> dict:
+        """转换为 SSE 传输格式"""
+        return {
+            "id": self.id,
+            "prompt": self.prompt,
+            "team_id": self.team_id,
+            "status": self.status.value,
+            "total_tasks": self.total_tasks,
+            "completed_tasks": self.completed_tasks,
+            "failed_tasks": self.failed_tasks,
+            "progress_percent": self.get_progress()["progress_percent"],
+            "timestamp": datetime.now().isoformat(),
+        }
+
 
 class ExecutionStorage:
     """执行记录存储"""
@@ -185,14 +200,61 @@ class ExecutionStorage:
         return ExecutionRecord(**meta)
 
     def list(self) -> list[ExecutionRecord]:
-        """列出所有执行记录"""
+        """列出所有执行记录（含完整日志）"""
         records = []
+        if not self.base_dir.exists():
+            return records
         for exec_dir in self.base_dir.iterdir():
             if exec_dir.is_dir():
                 record = self.load(exec_dir.name)
                 if record:
                     records.append(record)
         return sorted(records, key=lambda r: r.created_at, reverse=True)
+
+    def list_meta_only(self) -> list[ExecutionRecord]:
+        """列出所有执行记录（仅元数据，不加载日志，性能更好）"""
+        records = []
+        if not self.base_dir.exists():
+            return records
+        for exec_dir in self.base_dir.iterdir():
+            if exec_dir.is_dir():
+                meta_path = exec_dir / "meta.json"
+                if not meta_path.exists():
+                    continue
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    meta["logs"] = []
+                    meta["created_at"] = datetime.fromisoformat(meta["created_at"])
+                    if meta.get("completed_at"):
+                        meta["completed_at"] = datetime.fromisoformat(meta["completed_at"])
+                    meta["status"] = ExecutionStatus(meta["status"])
+                    records.append(ExecutionRecord(**meta))
+                except Exception:
+                    continue
+        return sorted(records, key=lambda r: r.created_at, reverse=True)
+
+    def cleanup(self, max_age_days: int = 7) -> int:
+        """清理过期的执行记录"""
+        import shutil
+        cleaned = 0
+        if not self.base_dir.exists():
+            return cleaned
+        cutoff = datetime.now().timestamp() - max_age_days * 86400
+        for exec_dir in self.base_dir.iterdir():
+            if exec_dir.is_dir():
+                meta_path = exec_dir / "meta.json"
+                if meta_path.exists():
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                        created = datetime.fromisoformat(meta["created_at"]).timestamp()
+                        if created < cutoff:
+                            shutil.rmtree(exec_dir)
+                            cleaned += 1
+                    except Exception:
+                        continue
+        return cleaned
 
 
 # 全局单例

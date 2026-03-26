@@ -15,6 +15,7 @@ from backend.models.execution import (
     execution_storage,
 )
 from backend.services.orchestrator import orchestrator_agent
+from backend.services.advanced_agent import advanced_agent
 
 
 router = APIRouter(prefix="/auto", tags=["auto"])
@@ -97,6 +98,47 @@ async def start_execution(
         stream_url=f"/api/v1/auto/execute/{team_id}/stream",
     )
 
+
+@router.post("/execute-advanced", response_model=ExecuteResponse)
+async def start_advanced_execution(
+    request: ExecuteRequest,
+    background_tasks: BackgroundTasks,
+):
+    """启动进阶自动执行 (ReAct 循环)"""
+    records = execution_storage.list_meta_only()
+    running = [r for r in records if r.status == ExecutionStatus.RUNNING]
+    if running:
+        raise HTTPException(
+            status_code=409,
+            detail="已有执行正在进行中，请等待完成或停止后再试"
+        )
+
+    execution_id = str(uuid.uuid4())[:12]
+    team_id = request.team_name or f"auto-adv-{execution_id}"
+
+    record = ExecutionRecord(
+        id=execution_id,
+        prompt=request.prompt,
+        team_id=team_id,
+        status=ExecutionStatus.RUNNING,
+    )
+    execution_storage.save(record)
+
+    async def run_advanced_agent():
+        await advanced_agent.execute(
+            request.prompt, team_id,
+            workdir=request.workdir,
+            execution_id=execution_id,
+        )
+
+    background_tasks.add_task(run_advanced_agent)
+
+    return ExecuteResponse(
+        execution_id=execution_id,
+        team_id=team_id,
+        status="running",
+        stream_url=f"/api/v1/auto/execute/{team_id}/stream",
+    )
 
 async def _stream_generator(identifier: str):
     """SSE 流生成器"""

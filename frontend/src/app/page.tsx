@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { teamsAPI } from "@/lib/api";
-import type { Team } from "@/lib/types";
+import { teamsAPI, autoAPI } from "@/lib/api";
+import type { Team, ExecutionRecord } from "@/lib/types";
 import { formatRelativeTime, getProgressPercent, getStatusLabel } from "@/lib/utils";
 
 export default function Dashboard() {
@@ -63,6 +63,13 @@ export default function Dashboard() {
             <span>🤖</span>
             自动模式
           </Link>
+          <Link
+            href="/auto/advanced"
+            className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg hover:from-yellow-600 hover:to-orange-600 transition-colors flex items-center gap-2 text-white font-medium shadow-sm"
+          >
+            <span>⚡</span>
+            进阶自动模式 (ReAct)
+          </Link>
           <Link href="/teams/new" className="px-4 py-2 bg-blue-400 rounded-lg hover:bg-blue-500 transition-colors">
             + 创建团队
           </Link>
@@ -104,7 +111,90 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      {/* Advanced Mode Sessions - Recent Activity */}
+      <RecentAdvancedSessions />
     </div>
+  );
+}
+
+function RecentAdvancedSessions() {
+  const [recent, setRecent] = useState<ExecutionRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadRecent();
+  }, []);
+
+  async function loadRecent() {
+    try {
+      const res = await autoAPI.list();
+      const advanced = res.executions
+        .filter((e: ExecutionRecord) => e.team_id?.startsWith("auto-adv-"))
+        .slice(0, 3);
+      setRecent(advanced);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading || recent.length === 0) return null;
+
+  return (
+    <section className="mt-12">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold flex items-center gap-2 text-gray-800">
+          <span>⚡</span> 最近进阶任务 (ReAct)
+        </h2>
+        <Link href="/auto/advanced" className="text-sm text-yellow-600 hover:text-yellow-700 font-medium font-bold underline underline-offset-4">
+          进入进阶模式中心 →
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {recent.map(session => (
+          <div key={session.id} className="bg-white border border-yellow-100 rounded-xl overflow-hidden shadow-sm flex h-80">
+            <div className="flex-[3] p-5 border-r border-gray-100 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  session.status === 'running' ? 'bg-yellow-100 text-yellow-700' : 
+                  session.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {session.status === 'running' ? '执行中...' : session.status}
+                </span>
+                <span className="text-xs text-gray-400">
+                  {new Date(session.created_at).toLocaleString()}
+                </span>
+              </div>
+              <p className="text-sm font-medium text-gray-800 line-clamp-3 mb-4 flex-grow italic">
+                "{session.prompt}"
+              </p>
+              <Link 
+                href={`/auto/advanced`} 
+                onClick={() => localStorage.setItem('clawteam_adv_selected', session.id)}
+                className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white p-2 rounded text-center transition-colors"
+              >
+                查看详情
+              </Link>
+            </div>
+            <div className="flex-[5] bg-gray-50 p-3 overflow-hidden">
+               <div className="h-full bg-white rounded border border-gray-200 overflow-y-auto p-2 font-mono text-[10px] leading-relaxed">
+                  <div className="text-gray-400 mb-2 border-b border-gray-100 pb-1 uppercase tracking-tighter">最新日志</div>
+                  {/* Reuse log panel logic or simple list */}
+                  {session.logs && session.logs.slice(-10).map((l: any, idx: number) => (
+                    <div key={idx} className="mb-1">
+                      <span className="text-blue-500">[{new Date(l.timestamp).toLocaleTimeString()}]</span>{" "}
+                      {l.content}
+                    </div>
+                  ))}
+                  {(!session.logs || session.logs.length === 0) && <div className="text-gray-400 italic">等待执行开始...</div>}
+               </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

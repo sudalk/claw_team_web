@@ -121,7 +121,25 @@ export type SSEEventType =
   | "worker_status_changed"
   | "worker_assigned"
   | "worker_terminated"
-  | "worker_message";
+  | "worker_message"
+  | "execution_started"
+  | "execution_completed"
+  | "execution_failed"
+  | "execution_stopped"
+  | "thinking"
+  | "step"
+  | "team_creating"
+  | "team_created"
+  | "team_failed"
+  | "worker_spawning"
+  | "worker_failed"
+  | "task_creating"
+  | "task_assigning"
+  | "task_assigned"
+  | "task_running"
+  | "task_completed_step"
+  | "task_failed_step"
+  | "user_feedback";
 
 export interface SSEEvent {
   type: SSEEventType;

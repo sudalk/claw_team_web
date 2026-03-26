@@ -132,6 +132,12 @@ export const autoAPI = {
       { method: "POST", body: JSON.stringify(data) }
     ),
 
+  executeAdvanced: (data: { prompt: string; team_name?: string; workdir?: string; model?: string }) =>
+    fetchAPI<{ execution_id: string; team_id: string; status: string; stream_url: string }>(
+      "/auto/execute-advanced",
+      { method: "POST", body: JSON.stringify(data) }
+    ),
+
   getStatus: (executionId: string) =>
     fetchAPI<ExecutionRecord>(`/auto/execute/${executionId}`),
 

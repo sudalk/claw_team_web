@@ -270,7 +270,7 @@ class TeamService:
 
     def delete_team(self, team_name: str) -> bool:
         """Delete a team using clawteam CLI."""
-        cmd = ["clawteam", "team", "cleanup", team_name]
+        cmd = ["clawteam", "team", "cleanup", team_name, "--force"]
 
         result = subprocess.run(
             cmd,

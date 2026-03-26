@@ -4,7 +4,7 @@ import { useState } from "react";
 import { autoAPI } from "@/lib/api";
 
 interface PromptInputProps {
-  onStart: (teamId: string) => void;
+  onStart: (teamId: string, executionId: string, prompt: string) => void;
   disabled?: boolean;
 }
 
@@ -30,7 +30,7 @@ export function PromptInput({ onStart, disabled }: PromptInputProps) {
         team_name: teamName.trim() || undefined,
         workdir: workdir.trim() || undefined,
       });
-      onStart(response.team_id);
+      onStart(response.team_id, response.execution_id, prompt.trim());
     } catch (e) {
       setError(e instanceof Error ? e.message : "启动失败");
       setLoading(false);

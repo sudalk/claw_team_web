@@ -153,7 +153,7 @@ export default function AutoModePage() {
       </aside>
 
       {/* 主内容区 - 2:4:4 比例 */}
-      <main className="flex-[2] flex overflow-hidden">
+      <main className="flex-[4] flex overflow-hidden">
         {selectedSession ? (
           <SessionView session={selectedSession} onComplete={handleComplete} />
         ) : (

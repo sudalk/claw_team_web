@@ -120,31 +120,10 @@ export function ExecutionLogPanel({ identifier, onComplete }: ExecutionLogPanelP
   }, [identifier]);
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 border border-gray-200 rounded-lg">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white rounded-t-lg">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">📜</span>
-          <span className="font-medium text-gray-700">执行日志</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {connected ? (
-            <span className="flex items-center gap-1 text-xs text-green-600">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              已连接
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-xs text-gray-400">
-              <span className="w-2 h-2 bg-gray-400 rounded-full" />
-              连接中...
-            </span>
-          )}
-        </div>
-      </div>
-
+    <div className="flex flex-col h-full bg-gray-50">
       {/* Error message */}
       {error && (
-        <div className="px-4 py-2 bg-red-50 text-red-600 text-sm border-b border-red-100">
+        <div className="px-4 py-2 bg-red-50 text-red-600 text-sm border-b border-red-100 flex-shrink-0">
           {error}
         </div>
       )}
@@ -152,7 +131,7 @@ export function ExecutionLogPanel({ identifier, onComplete }: ExecutionLogPanelP
       {/* Logs */}
       <div
         ref={logContainerRef}
-        className="flex-1 overflow-y-auto p-4 text-sm max-h-96"
+        className="flex-1 overflow-y-auto p-4 text-sm"
       >
         {logs.length === 0 ? (
           <div className="text-gray-400 text-center py-8">
@@ -162,12 +141,12 @@ export function ExecutionLogPanel({ identifier, onComplete }: ExecutionLogPanelP
           logs.map((log, index) => (
             <div
               key={log.id || index}
-              className={`flex gap-3 py-1 ${LOG_COLORS[log.type] || "text-gray-700"}`}
+              className={`flex gap-3 py-1.5 hover:bg-gray-100 rounded px-1 ${LOG_COLORS[log.type] || "text-gray-700"}`}
             >
               <span className="flex-shrink-0 w-6 text-center">
                 {LOG_ICONS[log.type] || "📝"}
               </span>
-              <span className="flex-1 whitespace-pre-wrap break-words">
+              <span className="flex-1 whitespace-pre-wrap break-words leading-relaxed">
                 {log.content}
               </span>
               <span className="flex-shrink-0 text-gray-400 text-xs">

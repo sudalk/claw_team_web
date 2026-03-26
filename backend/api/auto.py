@@ -42,6 +42,7 @@ class ExecutionStatusResponse(BaseModel):
     id: str
     prompt: str
     team_id: str | None
+    workdir: str | None
     status: str
     total_tasks: int
     completed_tasks: int
@@ -76,6 +77,7 @@ async def start_execution(
         id=execution_id,
         prompt=request.prompt,
         team_id=team_id,
+        workdir=request.workdir,
         status=ExecutionStatus.RUNNING,
     )
     execution_storage.save(record)
@@ -120,6 +122,7 @@ async def start_advanced_execution(
         id=execution_id,
         prompt=request.prompt,
         team_id=team_id,
+        workdir=request.workdir,
         status=ExecutionStatus.RUNNING,
     )
     execution_storage.save(record)
@@ -212,10 +215,19 @@ async def stream_execution(identifier: str):
     )
 
 
-@router.get("/execute/{execution_id}", response_model=ExecutionStatusResponse)
-async def get_execution_status(execution_id: str):
+@router.get("/execute/{identifier}", response_model=ExecutionStatusResponse)
+async def get_execution_status(identifier: str):
     """获取执行状态"""
-    record = execution_storage.load(execution_id)
+    # Try loading by execution ID first
+    record = execution_storage.load(identifier)
+
+    # If not found, try searching by team_id
+    if not record:
+        records = execution_storage.list()
+        for r in records:
+            if r.team_id == identifier:
+                record = r
+                break
 
     if not record:
         raise HTTPException(status_code=404, detail="执行记录不存在")
@@ -226,6 +238,7 @@ async def get_execution_status(execution_id: str):
         id=record.id,
         prompt=record.prompt,
         team_id=record.team_id,
+        workdir=record.workdir,
         status=record.status.value,
         total_tasks=progress["total_tasks"],
         completed_tasks=progress["completed_tasks"],
@@ -247,6 +260,7 @@ async def list_executions():
                 "id": r.id,
                 "prompt": r.prompt,
                 "team_id": r.team_id,
+                "workdir": r.workdir,
                 "status": r.status.value,
                 "total_tasks": r.total_tasks,
                 "completed_tasks": r.completed_tasks,
@@ -285,4 +299,26 @@ async def stop_execution(execution_id: str):
         execution_id=record.id,
         status="stopped",
         message="执行已停止"
+    )
+
+
+class DeleteResponse(BaseModel):
+    """删除执行的响应"""
+    execution_id: str
+    success: bool
+    message: str
+
+
+@router.delete("/execute/{execution_id}", response_model=DeleteResponse)
+async def delete_execution(execution_id: str):
+    """删除执行记录"""
+    success = execution_storage.delete(execution_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="执行记录不存在")
+
+    return DeleteResponse(
+        execution_id=execution_id,
+        success=True,
+        message="执行记录已删除"
     )

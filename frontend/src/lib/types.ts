@@ -175,6 +175,7 @@ export interface ExecutionRecord {
   id: string;
   prompt: string;
   team_id: string | null;
+  workdir?: string | null;  // 用户指定的工作目录
   status: ExecutionStatus;
   total_tasks: number;
   completed_tasks: number;
@@ -196,4 +197,30 @@ export interface ExecuteResponse {
   team_id: string;
   status: string;
   stream_url: string;
+}
+
+// ============ Workspace Explorer Types ============
+
+export interface FileInfo {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  size: number;
+  mtime: string;
+  is_hidden: boolean;
+}
+
+export interface DirectoryListing {
+  items: FileInfo[];
+  path: string;
+}
+
+export interface FileContent {
+  name: string;
+  path: string;
+  type: string;
+  size: number;
+  content: string;
+  mtime?: string;
+  truncated: boolean;
 }

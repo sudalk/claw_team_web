@@ -321,14 +321,14 @@ class WorkerService:
         # Build task prompt
         task_prompt = (
             f"你被分配了以下任务:\n\n"
-            f"任务: {task_data.get('subject', '')}\n"
-            f"{task_data.get('description', '')}\n\n"
-            f"工作目录: {workdir or '自动分配'}\n\n"
-            f"请立即开始执行，完成后:\n"
-            f"1. 将工作目录切换到 {workdir or '自动分配'}\n"
-            f"2. 完成代码编写\n"
-            f"3. 使用 clawteam task update {team_name} {task_id} --status completed 标记完成\n"
-            f"4. 使用 clawteam inbox send {team_name} leader \"任务已完成\" 发送通知"
+            f"任务主体: {task_data.get('subject', '')}\n"
+            f"任务描述: {task_data.get('description', '')}\n\n"
+            f"【关键要求】项目工作目录为: {workdir or '自动分配'}\n"
+            f"请按照以下步骤执行:\n"
+            f"1. 立即执行 `cd {workdir}` 切换到工作目录 (如果尚未进入)\n"
+            f"2. 按照任务描述进行开发/修复\n"
+            f"3. 任务完成后，执行 `clawteam task update {team_name} {task_id} --status completed` 标记完成\n"
+            f"4. 执行 `clawteam inbox send {team_name} leader \"任务已完成\"` 发送通知"
         )
 
         backend_type = worker_data.get("config", {}).get("backend", "tmux")

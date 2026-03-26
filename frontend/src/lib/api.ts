@@ -1,6 +1,6 @@
 // API client for ClawTeam Web API
 
-import type { Team, Task, Worker, Message, CLIInfo, SSEEvent, ExecutionRecord, ExecutionLog } from "@/lib/types";
+import type { Team, Task, Worker, Message, CLIInfo, SSEEvent, ExecutionRecord, ExecutionLog, DirectoryListing, FileContent } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -150,9 +150,24 @@ export const autoAPI = {
       { method: "POST" }
     ),
 
+  delete: (executionId: string) =>
+    fetchAPI<{ execution_id: string; success: boolean; message: string }>(
+      `/auto/execute/${executionId}`,
+      { method: "DELETE" }
+    ),
+
   createEventSource: (identifier: string): EventSource => {
     return new EventSource(`${API_BASE}/auto/execute/${identifier}/stream`);
   },
+};
+
+// ============ Workspace Explorer API ============
+export const workspaceAPI = {
+  list: (path?: string) =>
+    fetchAPI<DirectoryListing>(`/workspace/list${path ? `?path=${encodeURIComponent(path)}` : ""}`),
+
+  getFile: (path: string) =>
+    fetchAPI<FileContent>(`/workspace/file?path=${encodeURIComponent(path)}`),
 };
 
 // Alias for backwards compatibility

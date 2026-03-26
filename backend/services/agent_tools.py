@@ -132,7 +132,7 @@ TOOLS_SCHEMA = [
     }
 ]
 
-async def execute_tool(name: str, args: dict, team_id: str) -> str:
+async def execute_tool(name: str, args: dict, team_id: str, workdir: Optional[str] = None) -> str:
     """Execute the management tool and return output."""
     try:
         if name == "create_task":
@@ -142,7 +142,8 @@ async def execute_tool(name: str, args: dict, team_id: str) -> str:
                 description=args.get("description"),
                 priority=getattr(TaskPriority, priority, TaskPriority.MEDIUM),
                 assignee_id=args.get("assignee_id"),
-                blocked_by=args.get("blocked_by", [])
+                blocked_by=args.get("blocked_by", []),
+                workdir=workdir # Pass team base workdir to task
             )
             resp = task_service.create_task(team_id, data)
             return f"Task created successfully. Task ID: {resp.id}"
@@ -162,6 +163,7 @@ async def execute_tool(name: str, args: dict, team_id: str) -> str:
             config = WorkerConfig(
                 cli=getattr(CLIVendor, cli_v, CLIVendor.CLAUDE),
                 backend=SpawnBackend.TMUX,
+                workdir=workdir, # Set agent workdir
                 execution_mode=ExecutionMode.AUTO,
                 auto_assign=True
             )

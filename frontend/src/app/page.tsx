@@ -170,13 +170,21 @@ function RecentAdvancedSessions() {
               <p className="text-sm font-medium text-gray-800 line-clamp-3 mb-4 flex-grow italic">
                 "{session.prompt}"
               </p>
-              <Link 
-                href={`/auto/advanced`} 
-                onClick={() => localStorage.setItem('clawteam_adv_selected', session.id)}
-                className="text-xs bg-yellow-500 hover:bg-yellow-600 text-white p-2 rounded text-center transition-colors"
-              >
-                查看详情
-              </Link>
+              <div className="flex gap-2">
+                <Link 
+                  href={`/auto/advanced`} 
+                  onClick={() => localStorage.setItem('clawteam_adv_selected', session.id)}
+                  className="flex-1 text-xs bg-yellow-500 hover:bg-yellow-600 text-white p-2 rounded text-center transition-colors font-medium"
+                >
+                  查看详情
+                </Link>
+                <Link 
+                  href={`/workspace?path=${encodeURIComponent(session.team_id ? `workspaces/${session.team_id}` : "")}`}
+                  className="flex-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded text-center transition-colors font-medium border border-gray-200"
+                >
+                  📂 文件
+                </Link>
+              </div>
             </div>
             <div className="flex-[5] bg-gray-50 p-3 overflow-hidden">
                <div className="h-full bg-white rounded border border-gray-200 overflow-y-auto p-2 font-mono text-[10px] leading-relaxed">

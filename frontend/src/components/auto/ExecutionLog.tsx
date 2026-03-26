@@ -6,6 +6,7 @@ import { autoAPI } from "@/lib/api";
 
 interface ExecutionLogPanelProps {
   identifier: string;
+  initialStatus?: string;
   onComplete?: () => void;
 }
 
@@ -66,58 +67,100 @@ function formatTime(timestamp: string): string {
   });
 }
 
-export function ExecutionLogPanel({ identifier, onComplete }: ExecutionLogPanelProps) {
+export function ExecutionLogPanel({ identifier, initialStatus, onComplete }: ExecutionLogPanelProps) {
   const [logs, setLogs] = useState<ExecutionLogType[]>([]);
   const [connected, setConnected] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const isFinishedRef = useRef(isFinished);
+  useEffect(() => { isFinishedRef.current = isFinished; }, [isFinished]);
+
   // Use ref to avoid re-creating EventSource when onComplete changes
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
     if (logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      const { scrollTop, scrollHeight, clientHeight } = logContainerRef.current;
+      // 只有当任务还在运行且用户本来就在底部附近时，才自动置底
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      if (!isFinished && isNearBottom) {
+        logContainerRef.current.scrollTop = scrollHeight;
+      }
     }
-  }, [logs]);
+  }, [logs, isFinished]);
 
   useEffect(() => {
-    const es = autoAPI.createEventSource(identifier);
+    // 如果初始状态就是终态，直接通过 API 拉取一次日志即可，不需要开 SSE
+    const isTerminal = initialStatus && ["completed", "failed", "stopped"].includes(initialStatus);
+    
+    let es: EventSource | null = null;
 
-    es.onopen = () => {
-      setConnected(true);
-      setError(null);
-    };
+    if (isTerminal) {
+      setIsFinished(true);
+      autoAPI.getStatus(identifier).then(res => {
+        if (res.logs) setLogs(res.logs);
+      }).catch(err => {
+        console.warn("Rest status failed, falling back to SSE:", err);
+        // If REST fails, we don't return here, so the ES code below runs
+        es = startStreaming();
+      });
+      return;
+    }
 
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+    es = startStreaming();
 
-        if (data.type === "connected" && data.status === "initializing") {
-          return;
+    function startStreaming() {
+      const newEs = autoAPI.createEventSource(identifier);
+      setConnected(false); // 重置连接状态
+
+      newEs.onopen = () => {
+        setConnected(true);
+        setError(null);
+      };
+
+      newEs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.type === "connected" && data.status === "initializing") {
+            return;
+          }
+
+          if (data.id && data.content) {
+            setLogs((prev) => {
+              if (prev.some(l => l.id === data.id)) return prev;
+              return [...prev, data as ExecutionLogType];
+            });
+          }
+
+          if (data.type === "execution_completed" || data.type === "execution_failed" || data.type === "execution_stopped") {
+            setIsFinished(true);
+            onCompleteRef.current?.();
+          }
+        } catch (e) {
+          console.error("Failed to parse SSE data:", e);
         }
+      };
 
-        if (data.id && data.content) {
-          setLogs((prev) => [...prev, data as ExecutionLogType]);
+      newEs.onerror = () => {
+        setConnected(false);
+        // 如果已经标记为任务结束，就不再报错显示断开连接
+        if (!isFinishedRef.current) {
+          setError("连接已中断，正在尝试重连...");
+        } else {
+          setError(null); // 任务结束后的报错全部清除
         }
-
-        if (data.type === "execution_completed" || data.type === "execution_failed" || data.type === "execution_stopped") {
-          onCompleteRef.current?.();
-        }
-      } catch (e) {
-        console.error("Failed to parse SSE data:", e);
-      }
-    };
-
-    es.onerror = () => {
-      setConnected(false);
-      setError("连接断开");
-    };
+      };
+      
+      return newEs;
+    }
 
     return () => {
-      es.close();
+      es?.close();
     };
-  }, [identifier]);
+  }, [identifier, initialStatus]);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">

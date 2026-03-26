@@ -82,6 +82,7 @@ class ExecutionRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:12])
     prompt: str
     team_id: Optional[str] = None
+    workdir: Optional[str] = None  # 用户指定的工作目录
     status: ExecutionStatus = ExecutionStatus.PENDING
     logs: list[ExecutionLog] = []
     created_at: datetime = Field(default_factory=datetime.now)
@@ -233,6 +234,15 @@ class ExecutionStorage:
                 except Exception:
                     continue
         return sorted(records, key=lambda r: r.created_at, reverse=True)
+
+    def delete(self, execution_id: str) -> bool:
+        """删除执行记录"""
+        import shutil
+        exec_dir = self._get_execution_dir(execution_id)
+        if exec_dir.exists() and exec_dir.is_dir():
+            shutil.rmtree(exec_dir)
+            return True
+        return False
 
     def cleanup(self, max_age_days: int = 7) -> int:
         """清理过期的执行记录"""

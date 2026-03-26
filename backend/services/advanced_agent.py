@@ -44,7 +44,8 @@ class AdvancedAgentService:
             "3. Assign tasks to workers using `assign_task` and start their execution using `trigger_worker`.\n"
             "4. Periodically use `list_tasks` and `list_workers` to monitor progress.\n"
             "Only stop and return a final message when you have verified that all assigned tasks have reached 'completed' status.\n"
-            f"Your managed team ID is: {team_id}"
+            f"Your managed team ID is: {team_id}\n"
+            f"The team's designated working directory is: {workdir or 'Managed by Platform'}"
         )
 
         try:
@@ -119,7 +120,7 @@ class AdvancedAgentService:
                         event_service.emit_sync(team_id, SSEEventType.EXECUTION_STEP, log.to_sse_data())
                         
                         # Execute management tool
-                        tool_result = await execute_tool(tool_name, tool_args, team_id)
+                        tool_result = await execute_tool(tool_name, tool_args, team_id, workdir=workdir)
                         
                         log = record.add_log(
                             log_type="step",

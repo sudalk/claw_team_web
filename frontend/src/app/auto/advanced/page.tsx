@@ -14,6 +14,7 @@ interface Session {
   id: string;
   prompt: string;
   team_id: string;
+  workdir?: string | null;
   status: string;
   created_at: string;
 }
@@ -71,6 +72,7 @@ export default function AdvancedAutoModePage() {
           id: e.id,
           prompt: e.prompt,
           team_id: e.team_id || "",
+          workdir: e.workdir,
           status: e.status,
           created_at: e.created_at,
         }));
@@ -132,23 +134,46 @@ export default function AdvancedAutoModePage() {
           ) : (
             <div className="py-2">
               {sessions.map(session => (
-                <button
+                <div
                   key={session.id}
-                  onClick={() => selectSession(session.id)}
-                  className={`w-full px-4 py-3 text-left border-b border-gray-100 transition-colors ${
+                  className={`group border-b border-gray-100 transition-colors ${
                     selectedId === session.id
                       ? "bg-yellow-50 border-l-4 border-l-yellow-500"
                       : "hover:bg-gray-50 border-l-4 border-l-transparent"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <StatusBadge status={session.status} />
-                    <span className="text-xs text-gray-400">{formatDate(session.created_at)}</span>
-                  </div>
-                  <p className="text-sm text-gray-700 line-clamp-2 leading-snug">
-                    {session.prompt}
-                  </p>
-                </button>
+                  <button
+                    onClick={() => selectSession(session.id)}
+                    className="w-full px-4 py-3 text-left"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <StatusBadge status={session.status} />
+                      <span className="text-xs text-gray-400">{formatDate(session.created_at)}</span>
+                    </div>
+                    <p className="text-sm text-gray-700 line-clamp-2 leading-snug">
+                      {session.prompt}
+                    </p>
+                  </button>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm("确定要删除这条执行记录吗？")) return;
+                      try {
+                        await autoAPI.delete(session.id);
+                        if (selectedId === session.id) {
+                          setSelectedId(null);
+                          localStorage.removeItem(SELECTED_SESSION_KEY);
+                        }
+                        loadSessions();
+                      } catch {
+                        alert("删除失败");
+                      }
+                    }}
+                    className="w-full px-4 py-1.5 text-xs text-red-500 hover:bg-red-50 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-left"
+                  >
+                    🗑️ 删除
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -171,6 +196,7 @@ export default function AdvancedAutoModePage() {
               <div className="h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <ExecutionLogPanel
                   identifier={selectedSession.team_id || selectedSession.id}
+                  initialStatus={selectedSession.status}
                   onComplete={handleComplete}
                 />
               </div>
@@ -254,6 +280,12 @@ function SessionView({ session, onComplete }: { session: Session; onComplete: ()
                 ■ 强制停止
               </button>
             )}
+            <Link
+              href={`/workspace?path=${encodeURIComponent(session.workdir || (session.team_id ? `workspaces/${session.team_id}` : ""))}`}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2 shadow-sm"
+            >
+              <span>📂</span> 查看工作空间
+            </Link>
           </div>
         </div>
 

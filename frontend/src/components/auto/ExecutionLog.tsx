@@ -83,13 +83,20 @@ export function ExecutionLogPanel({ identifier, initialStatus, onComplete }: Exe
   useEffect(() => {
     if (logContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = logContainerRef.current;
-      // 只有当任务还在运行且用户本来就在底部附近时，才自动置底
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-      if (!isFinished && isNearBottom) {
-        logContainerRef.current.scrollTop = scrollHeight;
+      // 只有当初次加载或用户就在底部附近时，才自动置底
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+      const isInitial = logs.length <= 10;
+      
+      if (isInitial || isNearBottom) {
+        // 使用 requestAnimationFrame 确保在 DOM 更新后执行
+        requestAnimationFrame(() => {
+          if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+          }
+        });
       }
     }
-  }, [logs, isFinished]);
+  }, [logs]);
 
   useEffect(() => {
     // 如果初始状态就是终态，直接通过 API 拉取一次日志即可，不需要开 SSE

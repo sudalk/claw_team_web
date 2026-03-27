@@ -144,57 +144,82 @@ async def start_advanced_execution(
     )
 
 async def _stream_generator(identifier: str):
-    """SSE 流生成器"""
-    # 尝试通过 team_id 查找（初始阶段）
-    records = execution_storage.list()
-    record = None
-
-    # 如果 identifier 是 team_id，找对应的执行
-    for r in records:
-        if r.team_id == identifier or r.id == identifier:
-            record = r
-            break
-
+    """SSE 流生成器 - 组合历史日志与实时事件"""
+    from backend.services.event_service import event_service
+    
+    # 1. 尝试加载现有记录以补齐历史日志
+    record = execution_storage.load(identifier)
+    
+    # 如果 identifier 是 team_id，遍历搜索
     if not record:
-        # 还没创建记录，发送初始消息
-        yield f"data: {json.dumps({'type': 'connected', 'team_id': identifier, 'status': 'initializing'})}\n\n"
-        # 等待记录创建
-        for _ in range(30):  # 最多等 30 秒
-            await asyncio.sleep(1)
-            records = execution_storage.list()
-            for r in records:
-                if r.team_id == identifier or r.id == identifier:
-                    record = r
-                    break
-            if record:
+        records = execution_storage.list()
+        for r in records:
+            if r.team_id == identifier or r.id == identifier:
+                record = r
                 break
-
-    if not record:
-        yield f"data: {json.dumps({'type': 'error', 'content': '执行记录未找到'})}\n\n"
-        return
-
-    # 流式发送日志
-    last_log_count = 0
-    while True:
-        # 检查新日志（先发送日志，再检查终止状态）
-        if len(record.logs) > last_log_count:
-            for log in record.logs[last_log_count:]:
+                
+    # 已有的内容先全部推过去
+    sent_log_ids = set()
+    if record:
+        for log in record.logs:
+            if log.id not in sent_log_ids:
+                sent_log_ids.add(log.id)
                 yield f"data: {json.dumps(log.to_sse_data())}\n\n"
-            last_log_count = len(record.logs)
+            
+    # 2. 订阅实时事件流
+    queue = event_service.subscribe(identifier)
+    try:
+        # 再次检查加载后的这段时间是否有新保存的日志（防止订阅瞬间的消息丢失）
+        # 这里使用 identifier 重新尝试 search
+        latest_record = record
+        if not latest_record:
+             for r in execution_storage.list():
+                if r.team_id == identifier or r.id == identifier:
+                    latest_record = r
+                    break
+        else:
+            latest_record = execution_storage.load(record.id)
 
-        if record.status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.STOPPED]:
-            # 发送终止事件（包含 content 字段以便前端显示）
-            terminal_data = record.to_sse_data()
-            terminal_data["content"] = terminal_data.get("content", f"执行{record.status.value}")
-            yield f"data: {json.dumps(terminal_data)}\n\n"
-            break
-
-        await asyncio.sleep(1)
-
-        # 重新加载记录
-        record = execution_storage.load(record.id)
-        if not record:
-            break
+        if latest_record:
+            for log in latest_record.logs:
+                if log.id not in sent_log_ids:
+                    sent_log_ids.add(log.id)
+                    yield f"data: {json.dumps(log.to_sse_data())}\n\n"
+        
+        # 3. 开始消费实时队列
+        while True:
+            try:
+                event_str = await asyncio.wait_for(queue.get(), timeout=30)
+                event_data = json.loads(event_str)
+                
+                # 兼容性处理：前端期望的是直接的 log 对象（含 id, content, type）
+                # 而 event_service 发出的是 SSEEvent 对象（含 type, data）
+                inner_data = event_data.get("data", {})
+                log_id = inner_data.get("id")
+                
+                # 如果是日志类事件，直接向前端推送 inner_data，使其符合前端 ExecutionLog 接口
+                if log_id:
+                    if log_id in sent_log_ids:
+                        continue
+                    sent_log_ids.add(log_id)
+                    # 确保 type 字段存在（前端解析需要）
+                    if "type" not in inner_data and "type" in event_data:
+                         # SSEEvent.type 是 EXECUTION_THINKING，而 Log.type 是 thinking
+                         # 这里的转换逻辑在后端 emit 时已经保持一致，通常可以直接透传
+                         pass
+                    yield f"data: {json.dumps(inner_data)}\n\n"
+                else:
+                    # 如果不是标准日志（比如 start/stop 事件），推原始数据
+                    yield f"data: {event_str}\n\n"
+                
+                # 终止条件
+                if event_data.get("type") in ["execution_completed", "execution_failed", "execution_stopped"]:
+                    break
+                    
+            except asyncio.TimeoutError:
+                yield ": keepalive\n\n"
+    finally:
+        event_service.unsubscribe(identifier, queue)
 
 
 @router.get("/execute/{identifier}/stream")

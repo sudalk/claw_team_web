@@ -129,6 +129,37 @@ TOOLS_SCHEMA = [
             },
             "required": ["task_ids"]
         }
+    },
+    {
+        "name": "send_message",
+        "description": "Send a direct message or additional instructions/context to a specific worker. Use this to provide details that weren't in the initial task description.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "worker_id": {
+                    "type": "string",
+                    "description": "The name or ID of the worker"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The message content"
+                }
+            },
+            "required": ["worker_id", "content"]
+        }
+    },
+    {
+        "name": "read_inbox",
+        "description": "Read messages sent to the 'leader' (you). Use this after a task is completed to get detailed results or feedback from workers.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "peek": {
+                    "type": "boolean",
+                    "description": "Whether to peek without consuming messages (default: true)"
+                }
+            }
+        }
     }
 ]
 
@@ -183,20 +214,59 @@ async def execute_tool(name: str, args: dict, team_id: str, workdir: Optional[st
             return "\n".join(lines)
             
         elif name == "assign_task":
-            resp = worker_service.assign_task(team_id, args["worker_id"], args["task_id"])
+            worker_id = args["worker_id"]
+            task_id = args["task_id"]
+            
+            # Resolve worker name to ID if needed
+            workers = worker_service.list_workers(team_id).workers
+            for w in workers:
+                if w.name == worker_id or w.id == worker_id:
+                    worker_id = w.id
+                    break
+            
+            # Resolve task subject to ID if needed
+            if len(task_id) < 8: # Likely not a full UUID
+                tasks = task_service.list_tasks(team_id).tasks
+                for t in tasks:
+                    if t.subject == task_id or t.id == task_id:
+                        task_id = t.id
+                        break
+                        
+            resp = worker_service.assign_task(team_id, worker_id, task_id)
             if not resp:
-                return "Failed to assign task. Please check ID validity."
-            return f"Task {args['task_id']} assigned to Worker {args['worker_id']}"
+                return f"Failed to assign task {task_id} to worker {worker_id}."
+            return f"Task {task_id} assigned to Worker {worker_id}"
             
         elif name == "trigger_worker":
-            # worker_service.execute_task is sync
-            resp = worker_service.execute_task(team_id, args["worker_id"])
+            worker_id = args["worker_id"]
+            # Resolve worker name to ID
+            workers = worker_service.list_workers(team_id).workers
+            for w in workers:
+                if w.name == worker_id or w.id == worker_id:
+                    worker_id = w.id
+                    break
+                    
+            resp = worker_service.execute_task(team_id, worker_id)
             if not resp:
-                return "Worker could not be triggered. Ensure it has an assigned task."
-            return f"Worker {args['worker_id']} is now running task {resp.id}."
+                return f"Worker {worker_id} could not be triggered. Ensure it has an assigned task."
+            return f"Worker {worker_id} is now running task {resp.id}."
             
         elif name == "wait_for_tasks":
-            task_ids = args["task_ids"]
+            input_task_ids = args["task_ids"]
+            task_ids = []
+            
+            # Resolve task names to IDs
+            all_tasks = task_service.list_tasks(team_id).tasks
+            for tid in input_task_ids:
+                found = False
+                for t in all_tasks:
+                    if t.id == tid or t.subject == tid:
+                        task_ids.append(t.id)
+                        found = True
+                        break
+                if not found:
+                    task_ids.append(tid)
+            
             timeout = min(args.get("timeout_seconds", 60), 300)
             start_time = asyncio.get_event_loop().time()
             
@@ -209,13 +279,38 @@ async def execute_tool(name: str, args: dict, team_id: str, workdir: Optional[st
                             pending_ids.append(t.id)
                 
                 if not pending_ids:
-                    return f"All requested tasks ({', '.join(task_ids)}) have finished."
+                    return f"All requested tasks have finished."
                 
                 elapsed = asyncio.get_event_loop().time() - start_time
                 if elapsed >= timeout:
                     return f"Timeout reached. Remaining tasks: {', '.join(pending_ids)}"
                 
-                await asyncio.sleep(5) # Wait 5 seconds before next check
+                await asyncio.sleep(5)
+            
+        elif name == "send_message":
+            from backend.services.agent_service import agent_service
+            worker_id = args["worker_id"]
+            
+            # Resolve worker name to ID
+            workers = worker_service.list_workers(team_id).workers
+            for w in workers:
+                if w.name == worker_id or w.id == worker_id:
+                    worker_id = w.id
+                    break
+                    
+            success = agent_service.send_message(team_id, worker_id, args["content"])
+            return f"Message sent to {worker_id}." if success else f"Failed to send to {worker_id}."
+            
+        elif name == "read_inbox":
+            from backend.services.agent_service import agent_service
+            messages = agent_service.receive_messages(team_id, "leader", peek=args.get("peek", True))
+            if not messages:
+                return "Your inbox is empty."
+            output = "Messages in your inbox:\n"
+            for msg in messages:
+                content = msg.get("content", "")
+                output += f"- {content}\n"
+            return output
             
         else:
             return f"Error: Unknown tool '{name}'"

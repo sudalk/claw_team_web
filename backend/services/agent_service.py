@@ -230,6 +230,42 @@ class AgentService:
 
         return result.returncode == 0
 
+    def receive_messages(self, team_name: str, agent_name: str, peek: bool = True) -> list[dict]:
+        """Receive or peek messages from an agent's inbox."""
+        cmd = [
+            "clawteam", "inbox",
+            "peek" if peek else "receive",
+            team_name,
+            "--agent", agent_name,
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=self.clawteam_dir.parent,
+        )
+
+        if result.returncode != 0:
+            return []
+
+        messages = []
+        # The CLI output for peek/receive is usually one message per line or a JSON block
+        # For simplicity, if it's multiple messages, we try to parse them
+        output = result.stdout.strip()
+        if not output:
+            return []
+
+        # If the output looks like a JSON array, parse it
+        if output.startswith("[") and output.endswith("]"):
+            try:
+                return json.loads(output)
+            except:
+                pass
+
+        # Otherwise, treat each paragraph/line as a message content
+        return [{"content": output}]
+
     def terminate_agent(self, team_name: str, agent_id: str) -> bool:
         """Terminate an agent."""
         # Get agent name

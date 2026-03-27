@@ -327,8 +327,8 @@ class WorkerService:
             f"请按照以下步骤执行:\n"
             f"1. 立即执行 `cd {workdir}` 切换到工作目录 (如果尚未进入)\n"
             f"2. 按照任务描述进行开发/修复\n"
-            f"3. 任务完成后，执行 `clawteam task update {team_name} {task_id} --status completed` 标记完成\n"
-            f"4. 执行 `clawteam inbox send {team_name} leader \"任务已完成\"` 发送通知"
+            f"3. **重要**: 任务完成后，请第一时间通过信箱汇报产出：执行 `clawteam inbox send {team_name} leader \"[任务完成报告] 原计划: {task_data.get('subject')}. 实际完成情况: ... (请提供关键结果、产出文件、或给后续环节的建议)\"`\n"
+            f"4. 最后执行 `clawteam task update {team_name} {task_id} --status completed` 标记任务正式结束"
         )
 
         backend_type = worker_data.get("config", {}).get("backend", "tmux")
